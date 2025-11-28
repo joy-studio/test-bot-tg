@@ -3,6 +3,17 @@ import requests
 import json
 import logging
 
+
+# Ваш токен
+bot = telebot.TeleBot("8415183073:AAEZImJs4tm28tRLBhpC6X0sRlQkYZRFRNI")
+
+# Удаляем вебхук перед запуском поллинга
+bot.remove_webhook()
+
+# Затем запускаем поллинг
+print("Бот запущен...")
+bot.infinity_polling()
+
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 
