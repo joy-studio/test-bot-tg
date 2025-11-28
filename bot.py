@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.INFO)
 
 # Конфигурация
 TELEGRAM_TOKEN = "8415183073:AAEZImJs4tm28tRLBhpC6X0sRlQkYZRFRNI"
-YANDEX_API_KEY = "AQVNyIecsLF9OK3bUGnG6XMWHPFeh9akBoNoB9qX"
+YANDEX_API_KEY = "AQVN2cwTgUZXGzhVLjkX94psR1HbdGEzA5pBsOTh"
 YANDEX_FOLDER_ID = "b1gemt0roqlr2v92e61p"
 
 # Инициализация бота
