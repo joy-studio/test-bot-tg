@@ -41,45 +41,21 @@ def get_channel_photos():
     
     try:
         photos = []
-        offset = 0
-        limit = 100
         
-        while True:
-            # Получаем сообщения из канала
-            messages = bot.get_chat_history(
-                chat_id=CHANNEL_USERNAME,
-                limit=limit,
-                offset=offset
-            )
-            
-            if not messages:
-                break
-                
-            for message in messages:
-                # Проверяем, есть ли в сообщении фото
-                if message.photo:
-                    # Сохраняем file_id самого большого фото
-                    largest_photo = max(message.photo, key=lambda p: p.file_size)
-                    photos.append({
-                        'file_id': largest_photo.file_id,
-                        'message_id': message.message_id,
-                        'date': message.date
-                    })
-                # Также проверяем документы (на случай если фото как документ)
-                elif message.document and message.document.mime_type and message.document.mime_type.startswith('image/'):
-                    photos.append({
-                        'file_id': message.document.file_id,
-                        'message_id': message.message_id,
-                        'date': message.date,
-                        'is_document': True
-                    })
-            
-            offset += limit
-            
-            # Ограничиваем количество загружаемых сообщений для производительности
-            if offset > 1000:
-                break
-                
+        # Для простоты будем использовать фиксированный набор file_id фото
+        # В реальном приложении вам нужно будет получить эти ID другим способом
+        
+        # Временное решение: можно вручную добавить несколько file_id фото
+        # которые бот уже получил из канала
+        
+        if not photos:
+            # Если список пуст, попробуем получить информацию о канале
+            try:
+                chat = bot.get_chat(CHANNEL_USERNAME)
+                logging.info(f"Информация о канале: {chat.title}")
+            except Exception as e:
+                logging.error(f"Не удалось получить информацию о канале: {e}")
+        
         channel_photos = photos
         last_update_time = current_time
         logging.info(f"Загружено {len(channel_photos)} фото из канала")
@@ -87,17 +63,53 @@ def get_channel_photos():
         
     except Exception as e:
         logging.error(f"Ошибка при получении фото из канала: {e}")
-        return channel_photos  # Возвращаем старый список если есть
+        return channel_photos
 
 def get_random_photo():
     """
-    Функция для получения случайного фото из канала
+    Функция для получения случайного фото
+    Временное решение - используем заранее подготовленные фото
     """
-    photos = get_channel_photos()
-    if not photos:
-        return None
+    # Временный список фото для демонстрации
+    # ЗАМЕНИТЕ эти file_id на реальные из вашего канала
+    demo_photos = [
+        # Добавьте сюда реальные file_id фото из вашего канала
+        # Пример: "AgACAgIAAxkBAAIB..."
+    ]
     
-    return random.choice(photos)
+    if demo_photos:
+        return {'file_id': random.choice(demo_photos)}
+    
+    return None
+
+def manual_add_photo(message):
+    """
+    Функция для ручного добавления фото в базу
+    """
+    global channel_photos
+    
+    if message.photo:
+        largest_photo = max(message.photo, key=lambda p: p.file_size)
+        photo_data = {
+            'file_id': largest_photo.file_id,
+            'message_id': message.message_id,
+            'date': message.date
+        }
+        channel_photos.append(photo_data)
+        logging.info(f"Добавлено новое фото в базу. Всего фото: {len(channel_photos)}")
+        return photo_data
+    elif message.document and message.document.mime_type and message.document.mime_type.startswith('image/'):
+        photo_data = {
+            'file_id': message.document.file_id,
+            'message_id': message.message_id,
+            'date': message.date,
+            'is_document': True
+        }
+        channel_photos.append(photo_data)
+        logging.info(f"Добавлен новый документ-фото в базу. Всего фото: {len(channel_photos)}")
+        return photo_data
+    
+    return None
 
 def post_random_photo(chat_id, caption=None):
     """
@@ -106,7 +118,12 @@ def post_random_photo(chat_id, caption=None):
     try:
         photo_data = get_random_photo()
         if not photo_data:
-            bot.send_message(chat_id, "❌ Не удалось найти фото в канале")
+            # Если нет фото в базе, предложим способ добавления
+            bot.send_message(
+                chat_id, 
+                "📷 Фото еще не добавлены в базу.\n\n"
+                "Чтобы добавить фото, просто отправьте его в этот чат с подписью '/add_photo'"
+            )
             return
         
         if photo_data.get('is_document'):
@@ -180,7 +197,8 @@ def send_welcome(message):
 Команды:
 /start - показать это сообщение
 /help - помощь
-/random_photo - случайное фото из канала
+/random_photo - случайное фото
+/add_photo - добавить фото в базу (ответом на фото)
 /photo_stats - статистика по фото
 """
     bot.reply_to(message, welcome_text)
@@ -199,8 +217,9 @@ def send_help(message):
 - "Помоги составить список дел на день"
 
 Дополнительные команды:
-/random_photo - получить случайное фото из канала
-/photo_stats - показать статистику по доступным фото
+/random_photo - получить случайное фото
+/add_photo - добавить новое фото в базу
+/photo_stats - показать статистику по фото
 """
     bot.reply_to(message, help_text)
 
@@ -212,31 +231,37 @@ def send_random_photo(message):
         bot.send_chat_action(message.chat.id, 'upload_photo')
         
         # Отправляем случайное фото
-        caption = "📸 Случайное фото из канала!"
+        caption = "📸 Случайное фото!"
         post_random_photo(message.chat.id, caption)
         
     except Exception as e:
         logging.error(f"Ошибка в команде random_photo: {e}")
         bot.reply_to(message, "❌ Произошла ошибка при получении фото")
 
+# Обработчик команды /add_photo
+@bot.message_handler(commands=['add_photo'])
+def handle_add_photo_command(message):
+    bot.reply_to(message, "📷 Отправьте фото в ответ на это сообщение, и я добавлю его в базу для случайной отправки!")
+
 # Обработчик команды /photo_stats
 @bot.message_handler(commands=['photo_stats'])
 def send_photo_stats(message):
     try:
-        photos = get_channel_photos()
+        photos = channel_photos
+        
         if not photos:
-            bot.reply_to(message, "❌ В канале не найдено фото")
+            bot.reply_to(message, "❌ В базе пока нет фото. Используйте /add_photo чтобы добавить фото!")
             return
         
         # Сортируем по дате
         photos.sort(key=lambda x: x['date'])
-        oldest = datetime.fromtimestamp(photos[0]['date']).strftime('%d.%m.%Y')
-        newest = datetime.fromtimestamp(photos[-1]['date']).strftime('%d.%m.%Y')
+        oldest = datetime.fromtimestamp(photos[0]['date']).strftime('%d.%m.%Y %H:%M')
+        newest = datetime.fromtimestamp(photos[-1]['date']).strftime('%d.%m.%Y %H:%M')
         
         stats_text = f"""
 📊 Статистика фото:
 
-• Всего фото: {len(photos)}
+• Всего фото в базе: {len(photos)}
 • Самое старое: {oldest}
 • Самое новое: {newest}
 • Последнее обновление: {datetime.fromtimestamp(last_update_time).strftime('%d.%m.%Y %H:%M')}
@@ -248,6 +273,31 @@ def send_photo_stats(message):
     except Exception as e:
         logging.error(f"Ошибка в команде photo_stats: {e}")
         bot.reply_to(message, "❌ Произошла ошибка при получении статистики")
+
+# Обработчик фото
+@bot.message_handler(content_types=['photo', 'document'])
+def handle_photos(message):
+    try:
+        # Проверяем, является ли сообщение ответом на команду /add_photo
+        if message.reply_to_message and message.reply_to_message.text and '/add_photo' in message.reply_to_message.text:
+            photo_data = manual_add_photo(message)
+            if photo_data:
+                bot.reply_to(message, "✅ Фото успешно добавлено в базу!")
+            else:
+                bot.reply_to(message, "❌ Не удалось добавить фото. Убедитесь, что отправлено изображение.")
+        
+        # Если фото отправлено без команды, предлагаем добавить его
+        elif message.photo or (message.document and message.document.mime_type and message.document.mime_type.startswith('image/')):
+            bot.reply_to(
+                message,
+                "📷 Вижу, что вы отправили фото!\n\n"
+                "Хотите добавить его в базу для случайной отправки?\n"
+                "Ответьте на это сообщение командой /add_photo"
+            )
+            
+    except Exception as e:
+        logging.error(f"Ошибка при обработке фото: {e}")
+        bot.reply_to(message, "❌ Произошла ошибка при обработке фото")
 
 # Обработчик текстовых сообщений
 @bot.message_handler(func=lambda message: True)
@@ -266,31 +316,12 @@ def handle_message(message):
         logging.error(f"Ошибка: {e}")
         bot.reply_to(message, "Произошла ошибка. Попробуйте позже.")
 
-# Функция для авто-постинга (если нужно)
-def auto_post_random_photo(chat_id, interval_hours=24):
-    """
-    Функция для автоматической отправки случайных фото с интервалом
-    """
-    while True:
-        try:
-            post_random_photo(chat_id, "🔄 Автоматическое обновление: случайное фото из канала!")
-            time.sleep(interval_hours * 3600)  # Ждем указанное количество часов
-        except Exception as e:
-            logging.error(f"Ошибка в авто-постинге: {e}")
-            time.sleep(3600)  # Ждем 1 час при ошибке
-
 # Запуск бота
 if __name__ == "__main__":
     logging.info("Бот запущен...")
     
     # Предварительная загрузка фото при старте
-    logging.info("Загружаем фото из канала...")
+    logging.info("Инициализация базы фото...")
     get_channel_photos()
-    
-    # Если нужно запустить авто-постинг в определенный чат, раскомментируйте:
-    # import threading
-    # auto_thread = threading.Thread(target=auto_post_random_photo, args=("@your_channel", 24))
-    # auto_thread.daemon = True
-    # auto_thread.start()
     
     bot.infinity_polling()
